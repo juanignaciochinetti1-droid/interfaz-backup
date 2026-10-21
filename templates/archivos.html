@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12161b">
+<style>html,body{background:#12161b}</style>
 <title>Archivos – Monitor de Copias</title>
 <link rel="stylesheet" href="/static/estilo.css">
 </head>
@@ -36,6 +39,13 @@
         <option value="20">20 por carpeta</option>
         <option value="50">50 por carpeta</option>
         <option value="100">100 por carpeta</option>
+      </select>
+      <label for="ordenMovil" class="solo-movil">Ordenar</label>
+      <select id="ordenMovil" class="solo-movil">
+        <option value="ts|0">Más nuevos primero</option>
+        <option value="ts|1">Más viejos primero</option>
+        <option value="nombre|1">Nombre (A-Z)</option>
+        <option value="tamano|0">Más grandes primero</option>
       </select>
     </div>
     <button class="sec" id="btnCsv">⬇ Exportar a Excel (CSV)</button>
@@ -109,16 +119,16 @@ function pintar(d) {
       mostrados += lista.length; total += x.archivos.length;
       cuerpo = lista.length ? lista.map(a => `
         <tr>
-          <td class="mono">${esc(a.nombre)}</td>
-          <td class="num">${esc(a.fecha)}</td>
-          <td class="num ${a.minutos > x.intervalo ? "viejo" : ""}">${hace(a.minutos)}</td>
-          <td class="num">${tamano(a.tamano)}</td>
+          <td class="mono titulo">${esc(a.nombre)}</td>
+          <td class="num" data-label="Modificado">${esc(a.fecha)}</td>
+          <td class="num ${a.minutos > x.intervalo ? "viejo" : ""}" data-label="Antigüedad">${hace(a.minutos)}</td>
+          <td class="num" data-label="Tamaño">${tamano(a.tamano)}</td>
         </tr>`).join("")
         : `<tr><td colspan="4" class="vacio">${x.archivos.length ? "Ningún archivo coincide con los filtros" : "La carpeta no tiene archivos"}</td></tr>`;
     }
     return `
       <h3>${esc(x.nombre)} <span class="badge ${x.estado}">${ETIQUETA[x.estado]}</span></h3>
-      <div class="tabla"><table>
+      <div class="tabla apilada"><table>
         <thead><tr>${encabezado()}</tr></thead>
         <tbody>${cuerpo}</tbody>
       </table></div>`;
@@ -159,6 +169,13 @@ document.getElementById("listado").onclick = e => {
   guardarPref("archOrden", orden); app.repintar();
 };
 document.getElementById("btnCsv").onclick = exportarCsv;
+const om = document.getElementById("ordenMovil");
+const valorOrden = () => `${orden.col}|${orden.asc ? 1 : 0}`;
+if ([...om.options].some(o => o.value === valorOrden())) om.value = valorOrden();
+om.onchange = e => {
+  const [col, asc] = e.target.value.split("|");
+  orden = { col, asc: asc === "1" }; guardarPref("archOrden", orden); app.repintar();
+};
 </script>
 </body>
 </html>

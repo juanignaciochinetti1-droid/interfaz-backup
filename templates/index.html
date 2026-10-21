@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12161b">
+<style>html,body{background:#12161b}</style>
 <title>Monitor de Copias</title>
 <link rel="stylesheet" href="/static/estilo.css">
 </head>
@@ -53,7 +56,7 @@
     </div>
     <button class="sec peq peligro" id="btnLimpiar">Limpiar historial</button>
   </div>
-  <div class="tabla"><table>
+  <div class="tabla apilada"><table>
     <thead><tr><th>Fecha</th><th>Carpeta</th><th>Evento</th></tr></thead>
     <tbody id="alertas"></tbody>
   </table></div>
@@ -133,17 +136,17 @@ function tarjeta(x) {
 }
 
 function tabla(lista) {
-  return `<div class="tabla"><table>
+  return `<div class="tabla apilada"><table>
     <thead><tr><th>Carpeta</th><th>Estado</th><th class="num">Última copia</th><th class="num">Antigüedad</th>
       <th class="num">Disco</th><th>Detalle</th><th>Acciones</th></tr></thead>
     <tbody>${lista.map(x => `
       <tr>
-        <td><b>${esc(x.nombre)}</b></td>
-        <td>${badges(x)}</td>
-        <td class="num">${esc(x.ultima_copia ?? "—")}</td>
-        <td class="num">${hace(x.minutos_desde_copia)}</td>
-        <td class="num">${x.porcentaje != null ? x.porcentaje + "%" : "—"}</td>
-        <td>${esc(x.mensaje)}</td>
+        <td class="titulo"><b>${esc(x.nombre)}</b></td>
+        <td data-label="Estado"><span>${badges(x)}</span></td>
+        <td class="num" data-label="Última copia">${esc(x.ultima_copia ?? "—")}</td>
+        <td class="num" data-label="Antigüedad">${hace(x.minutos_desde_copia)}</td>
+        <td class="num" data-label="Disco">${x.porcentaje != null ? x.porcentaje + "%" : "—"}</td>
+        <td data-label="Detalle"><span>${esc(x.mensaje)}</span></td>
         <td><div class="acciones" style="margin:0">${acciones(x)}</div></td>
       </tr>`).join("")}</tbody></table></div>`;
 }
@@ -176,8 +179,8 @@ function pintarHistorial(d) {
   }
   const lista = d.alertas.filter(a => (hCarpeta === "todas" || a.servidor === hCarpeta) && (hTipo === "todos" || a.nivel === hTipo));
   document.getElementById("alertas").innerHTML = lista.length
-    ? lista.map(a => `<tr><td style="white-space:nowrap">${esc(a.fecha)}</td><td>${esc(a.servidor)}</td>
-        <td><span class="dot" style="background:${COLOR[a.nivel] || "var(--muted)"}"></span>${esc(a.mensaje)}</td></tr>`).join("")
+    ? lista.map(a => `<tr><td style="white-space:nowrap" data-label="Fecha">${esc(a.fecha)}</td><td data-label="Carpeta">${esc(a.servidor)}</td>
+        <td data-label="Evento"><span><span class="dot" style="background:${COLOR[a.nivel] || "var(--muted)"}"></span>${esc(a.mensaje)}</span></td></tr>`).join("")
     : `<tr><td colspan="3" class="vacio">Sin eventos</td></tr>`;
 }
 
