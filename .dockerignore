@@ -1,0 +1,9 @@
+.env
+.env.example
+config.json
+config.example.json
+docker/
+data/
+.git/
+__pycache__/
+*.pyc

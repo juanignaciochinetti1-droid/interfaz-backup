@@ -1,0 +1,12 @@
+# Archivos con contraseñas: NO subir (usar los .example)
+.env
+config.json
+docker/config.json
+
+# Datos del monitor (historial y silencios)
+data/
+
+__pycache__/
+*.pyc
+.venv/
+venv/

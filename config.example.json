@@ -1,0 +1,95 @@
+{
+  "puerto_web": 5050,
+  "host_web": "0.0.0.0",
+  "chequeo_cada_segundos": 60,
+  "archivos_por_carpeta": 100,
+  "eventos_a_guardar": 500,
+  "avisos": {
+    "email": {
+      "activo": false,
+      "servidor": "smtp.gmail.com",
+      "puerto": 587,
+      "usuario": "",
+      "password": "",
+      "remitente": "",
+      "destinatarios": [
+        "sistemas@ejemplo.com"
+      ]
+    },
+    "telegram": {
+      "activo": false,
+      "token": "",
+      "chat_id": ""
+    }
+  },
+  "servidores": [
+    {
+      "nombre": "backups",
+      "modo": "ruta",
+      "host": "IP_TRUENAS",
+      "puerto": 445,
+      "usuario": "CAMBIAR_USUARIO",
+      "password": "CAMBIAR",
+      "ruta_backups": "\\\\IP_TRUENAS\\backups",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    },
+    {
+      "nombre": "sql",
+      "modo": "ruta",
+      "host": "IP_SERVIDOR_2",
+      "puerto": 445,
+      "ruta_backups": "\\\\IP_SERVIDOR_2\\sql",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    },
+    {
+      "nombre": "Backups2",
+      "modo": "ruta",
+      "host": "IP_SERVIDOR_2",
+      "puerto": 445,
+      "ruta_backups": "\\\\IP_SERVIDOR_2\\Backups2",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    },
+    {
+      "nombre": "Evaluaciones",
+      "modo": "ssh",
+      "host": "IP_DEBIAN",
+      "puerto": 22,
+      "usuario": "CAMBIAR_USUARIO",
+      "password": "CAMBIAR",
+      "ruta_backups": "/mnt/almacenamiento/backups/Evaluaciones",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    },
+    {
+      "nombre": "Reloj_fichador",
+      "modo": "ssh",
+      "host": "IP_DEBIAN",
+      "puerto": 22,
+      "usuario": "CAMBIAR_USUARIO",
+      "password": "CAMBIAR",
+      "ruta_backups": "/mnt/almacenamiento/backups/Reloj_fichador",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    },
+    {
+      "nombre": "SistemaDeInventario",
+      "modo": "ssh",
+      "host": "IP_DEBIAN",
+      "puerto": 22,
+      "usuario": "CAMBIAR_USUARIO",
+      "password": "CAMBIAR",
+      "ruta_backups": "/mnt/almacenamiento/backups/SistemaDeInventario",
+      "intervalo_minutos": 30,
+      "tolerancia_minutos": 5,
+      "alerta_disco_porcentaje": 90
+    }
+  ]
+}

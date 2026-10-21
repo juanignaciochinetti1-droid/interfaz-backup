@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archivos – Monitor de Copias</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Últimos archivos modificados</h1>
+    <div class="sub" id="actualizado">Cargando…</div>
+  </div>
+  <nav><a href="/">Estado</a><a href="/archivos" class="activo">Archivos</a></nav>
+  <div class="grupo">
+    <button id="btnAvisos" class="sec aviso-campana"></button>
+    <button id="btn">Chequear todo</button>
+  </div>
+</header>
+<main>
+  <div class="filtros" id="carpetas"></div>
+  <div class="barra">
+    <div class="grupo">
+      <input type="search" id="buscar" placeholder="Buscar archivo (ej. VENTAS, .zip)…" autocomplete="off">
+      <label for="fecha">Modificados</label>
+      <select id="fecha">
+        <option value="todos">Cualquier fecha</option>
+        <option value="1h">Última hora</option>
+        <option value="hoy">Hoy</option>
+        <option value="7d">Últimos 7 días</option>
+        <option value="30d">Últimos 30 días</option>
+      </select>
+      <label for="cantidad">Mostrar</label>
+      <select id="cantidad">
+        <option value="20">20 por carpeta</option>
+        <option value="50">50 por carpeta</option>
+        <option value="100">100 por carpeta</option>
+      </select>
+    </div>
+    <button class="sec" id="btnCsv">⬇ Exportar a Excel (CSV)</button>
+  </div>
+  <p class="contador" id="contador"></p>
+  <div id="listado"><div class="vacio">Esperando el primer chequeo…</div></div>
+</main>
+<script src="/static/comun.js"></script>
+<script>
+let carpeta = pref("archCarpeta", "todas");
+let texto = "";
+let rangoFecha = pref("archFecha", "todos");
+let cantidad = pref("archCantidad", 20);
+let orden = pref("archOrden", { col: "ts", asc: false });
+let datos = null;
+
+const COLUMNAS = [["nombre", "Archivo", ""], ["ts", "Última modificación", "num"], ["minutos", "Antigüedad", "num"], ["tamano", "Tamaño", "num"]];
+
+function desdeFecha() {
+  const ahora = Date.now() / 1000;
+  if (rangoFecha === "1h") return ahora - 3600;
+  if (rangoFecha === "7d") return ahora - 7 * 86400;
+  if (rangoFecha === "30d") return ahora - 30 * 86400;
+  if (rangoFecha === "hoy") { const h = new Date(); h.setHours(0, 0, 0, 0); return h.getTime() / 1000; }
+  return 0;
+}
+
+// Devuelve los archivos que pasan los filtros, ordenados y recortados
+function filtrar(x) {
+  const desde = desdeFecha();
+  const t = texto.toLowerCase();
+  let lista = x.archivos.filter(a => a.ts >= desde && (!t || a.nombre.toLowerCase().includes(t)));
+  const { col, asc } = orden;
+  lista.sort((a, b) => {
+    const r = col === "nombre" ? a.nombre.localeCompare(b.nombre) : (a[col] - b[col]);
+    return asc ? r : -r;
+  });
+  return lista.slice(0, cantidad);
+}
+
+function visibles() {
+  return datos ? datos.servidores.filter(x => carpeta === "todas" || x.nombre === carpeta) : [];
+}
+
+function encabezado() {
+  return COLUMNAS.map(([c, t, cls]) => {
+    const flecha = orden.col === c ? `<span class="flecha">${orden.asc ? "▲" : "▼"}</span>` : "";
+    return `<th class="ordenable ${cls}" data-col="${c}">${t}${flecha}</th>`;
+  }).join("");
+}
+
+function pintar(d) {
+  datos = d;
+  document.getElementById("actualizado").textContent = "Última actualización: " + d.ahora;
+  const s = d.servidores;
+  if (carpeta !== "todas" && !s.some(x => x.nombre === carpeta)) carpeta = "todas";
+
+  document.getElementById("carpetas").innerHTML = ["todas", ...s.map(x => x.nombre)].map(n =>
+    `<button class="${n === carpeta ? "activo" : ""}" data-n="${esc(n)}">${n === "todas" ? "Todas" : esc(n)}</button>`
+  ).join("");
+
+  const vis = visibles();
+  if (!vis.length) return;
+  let mostrados = 0, total = 0;
+  document.getElementById("listado").innerHTML = vis.map(x => {
+    let cuerpo;
+    if (!x.conectado) {
+      cuerpo = `<tr><td colspan="4" class="vacio">No disponible: ${esc(x.mensaje)}</td></tr>`;
+    } else {
+      const lista = filtrar(x);
+      mostrados += lista.length; total += x.archivos.length;
+      cuerpo = lista.length ? lista.map(a => `
+        <tr>
+          <td class="mono">${esc(a.nombre)}</td>
+          <td class="num">${esc(a.fecha)}</td>
+          <td class="num ${a.minutos > x.intervalo ? "viejo" : ""}">${hace(a.minutos)}</td>
+          <td class="num">${tamano(a.tamano)}</td>
+        </tr>`).join("")
+        : `<tr><td colspan="4" class="vacio">${x.archivos.length ? "Ningún archivo coincide con los filtros" : "La carpeta no tiene archivos"}</td></tr>`;
+    }
+    return `
+      <h3>${esc(x.nombre)} <span class="badge ${x.estado}">${ETIQUETA[x.estado]}</span></h3>
+      <div class="tabla"><table>
+        <thead><tr>${encabezado()}</tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table></div>`;
+  }).join("");
+  document.getElementById("contador").textContent = `Mostrando ${mostrados} archivos (de los ${total} más recientes que lee el monitor)`;
+}
+
+function exportarCsv() {
+  const filas = [["Carpeta", "Archivo", "Última modificación", "Antigüedad (min)", "Tamaño (bytes)"]];
+  for (const x of visibles()) {
+    if (!x.conectado) continue;
+    for (const a of filtrar(x)) filas.push([x.nombre, a.nombre, a.fecha, a.minutos, a.tamano]);
+  }
+  const csv = filas.map(f => f.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `archivos-copias-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const app = iniciar(pintar);
+
+document.getElementById("fecha").value = rangoFecha;
+document.getElementById("cantidad").value = String(cantidad);
+document.getElementById("carpetas").onclick = e => {
+  const b = e.target.closest("[data-n]"); if (!b) return;
+  carpeta = b.dataset.n; guardarPref("archCarpeta", carpeta); app.repintar();
+};
+document.getElementById("buscar").oninput = e => { texto = e.target.value.trim(); app.repintar(); };
+document.getElementById("fecha").onchange = e => { rangoFecha = e.target.value; guardarPref("archFecha", rangoFecha); app.repintar(); };
+document.getElementById("cantidad").onchange = e => { cantidad = +e.target.value; guardarPref("archCantidad", cantidad); app.repintar(); };
+document.getElementById("listado").onclick = e => {
+  const th = e.target.closest("[data-col]"); if (!th) return;
+  const col = th.dataset.col;
+  orden = orden.col === col ? { col, asc: !orden.asc } : { col, asc: col === "nombre" };
+  guardarPref("archOrden", orden); app.repintar();
+};
+document.getElementById("btnCsv").onclick = exportarCsv;
+</script>
+</body>
+</html>

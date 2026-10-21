@@ -1,0 +1,38 @@
+services:
+  monitor-copias:
+    build: .
+    container_name: monitor-copias
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./docker/config.json:/app/config/config.json:ro
+      - ./data:/app/data          # historial y silencios (sobreviven a reinicios)
+      - truenas_backups:/datos/backups:ro
+      # Activar cuando estén SRV2_USUARIO / SRV2_PASSWORD en .env:
+      # - srv2_sql:/datos/sql:ro
+      # - srv2_backups2:/datos/Backups2:ro
+
+# Carpetas compartidas montadas por Docker (solo lectura).
+# Servidores, usuarios y contraseñas se toman del archivo .env
+volumes:
+  truenas_backups:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${TRUENAS_HOST}/backups"
+      o: "addr=${TRUENAS_HOST},username=${TRUENAS_USUARIO},password=${TRUENAS_PASSWORD},vers=3.0,ro"
+  srv2_sql:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${SRV2_HOST}/sql"
+      o: "addr=${SRV2_HOST},username=${SRV2_USUARIO},password=${SRV2_PASSWORD},vers=3.0,ro"
+  srv2_backups2:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//${SRV2_HOST}/Backups2"
+      o: "addr=${SRV2_HOST},username=${SRV2_USUARIO},password=${SRV2_PASSWORD},vers=3.0,ro"

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor de Copias</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Monitor de Copias de Seguridad</h1>
+    <div class="sub" id="actualizado">Cargando…</div>
+  </div>
+  <nav><a href="/" class="activo">Estado</a><a href="/archivos">Archivos</a></nav>
+  <div class="grupo">
+    <button id="btnAvisos" class="sec aviso-campana"></button>
+    <button id="btn">Chequear todo</button>
+  </div>
+</header>
+<main>
+  <div class="barra">
+    <div class="grupo" id="filtros"></div>
+    <div class="grupo">
+      <label for="orden">Ordenar</label>
+      <select id="orden">
+        <option value="estado">Problemas primero</option>
+        <option value="nombre">Nombre</option>
+        <option value="antiguedad">Copia más vieja primero</option>
+        <option value="disco">Disco más lleno primero</option>
+      </select>
+      <div class="segmentado" id="vista">
+        <button data-v="tarjetas">Tarjetas</button><button data-v="tabla">Tabla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="contenido"><div class="vacio">Esperando el primer chequeo…</div></div>
+
+  <h3>Historial de eventos</h3>
+  <div class="barra">
+    <div class="grupo">
+      <label for="hCarpeta">Carpeta</label><select id="hCarpeta"></select>
+      <label for="hTipo">Tipo</label>
+      <select id="hTipo">
+        <option value="todos">Todos</option>
+        <option value="alerta">Alertas</option>
+        <option value="sin_acceso">Sin acceso</option>
+        <option value="error">Sin conexión</option>
+        <option value="ok">Recuperadas</option>
+        <option value="info">Silencios</option>
+      </select>
+    </div>
+    <button class="sec peq peligro" id="btnLimpiar">Limpiar historial</button>
+  </div>
+  <div class="tabla"><table>
+    <thead><tr><th>Fecha</th><th>Carpeta</th><th>Evento</th></tr></thead>
+    <tbody id="alertas"></tbody>
+  </table></div>
+</main>
+<script src="/static/comun.js"></script>
+<script>
+const FILTROS = [
+  ["todas", "Todas", "var(--text)"],
+  ["problemas", "Con problemas", "var(--err)"],
+  ["ok", "OK", "var(--ok)"],
+  ["alerta", "Copia atrasada", "var(--warn)"],
+  ["sin_acceso", "Sin acceso", "var(--acc)"],
+  ["error", "Sin conexión", "var(--err)"],
+];
+const SILENCIOS = [[30, "30 min"], [60, "1 hora"], [240, "4 horas"], [1440, "24 horas"]];
+
+let filtro = pref("filtroEstado", "todas");
+let orden = pref("orden", "estado");
+let vista = pref("vista", "tarjetas");
+let hCarpeta = "todas", hTipo = "todos";
+let datos = null;
+
+const esProblema = s => s.estado !== "ok" && !s.silenciado;
+
+function punto(v, si = "Responde", no = "No responde") {
+  if (v == null) return "—";
+  return `<span class="dot" style="background:${v ? "var(--ok)" : "var(--err)"}"></span>${v ? si : no}`;
+}
+
+function badges(x) {
+  return (x.silenciado ? `<span class="badge silencio" title="Hasta ${esc(x.silenciado_hasta)}">🔕 SILENCIADA</span>` : "")
+    + `<span class="badge ${x.estado}">${ETIQUETA[x.estado]}</span>`;
+}
+
+function acciones(x) {
+  const n = esc(x.nombre);
+  const silencio = x.silenciado
+    ? `<button class="sec peq" data-reactivar="${n}">Reactivar alertas</button>
+       <span class="sub">hasta ${esc(x.silenciado_hasta)}</span>`
+    : `<select data-silenciar="${n}" title="No marcar alertas durante un tiempo">
+         <option value="">Silenciar…</option>
+         ${SILENCIOS.map(([m, t]) => `<option value="${m}">${t}</option>`).join("")}
+       </select>`;
+  return `<button class="sec peq" data-chequear="${n}">Chequear</button>${silencio}`;
+}
+
+function ordenar(lista) {
+  const copia = [...lista];
+  const f = {
+    estado: (a, b) => (esProblema(b) - esProblema(a)) || (PRIORIDAD[a.estado] - PRIORIDAD[b.estado]) || a.nombre.localeCompare(b.nombre),
+    nombre: (a, b) => a.nombre.localeCompare(b.nombre),
+    antiguedad: (a, b) => (b.minutos_desde_copia ?? Infinity) - (a.minutos_desde_copia ?? Infinity),
+    disco: (a, b) => (b.porcentaje ?? -1) - (a.porcentaje ?? -1),
+  }[orden];
+  return copia.sort(f);
+}
+
+function tarjeta(x) {
+  const pct = x.porcentaje ?? 0;
+  const colBar = pct >= 90 ? "var(--err)" : pct >= 75 ? "var(--warn)" : "var(--ok)";
+  return `
+  <div class="card ${x.estado} ${x.silenciado ? "silenciada" : ""}">
+    <div class="top"><h2>${esc(x.nombre)}</h2><div>${badges(x)}</div></div>
+    <div class="msg ${x.estado}">${esc(x.mensaje)}</div>
+    <div class="fila"><span>Servidor (ping)</span><span>${punto(x.ping)}</span></div>
+    <div class="fila"><span>Servicio (puerto)</span><span>${punto(x.puerto_ok)}</span></div>
+    <div class="fila"><span>Acceso a la carpeta</span><span>${punto(x.conectado, "Sí", "No")}</span></div>
+    <div class="fila"><span>Última copia</span><span>${x.ultima_copia ? esc(x.ultima_copia) + " (" + hace(x.minutos_desde_copia) + ")" : "—"}</span></div>
+    <div class="fila"><span>Intervalo esperado</span><span>cada ${x.intervalo} min</span></div>
+    ${x.total ? `
+      <div class="bar"><div style="width:${pct}%;background:${colBar}"></div></div>
+      <div class="fila"><span>Almacenamiento</span><span>${gb(x.usado)} de ${gb(x.total)} (${pct}%)</span></div>
+      <div class="fila"><span>Libre</span><span>${gb(x.libre)}</span></div>` : ""}
+    <div class="acciones">${acciones(x)}</div>
+    <div class="sub" style="margin-top:8px">Chequeado: ${esc(x.chequeado)}</div>
+  </div>`;
+}
+
+function tabla(lista) {
+  return `<div class="tabla"><table>
+    <thead><tr><th>Carpeta</th><th>Estado</th><th class="num">Última copia</th><th class="num">Antigüedad</th>
+      <th class="num">Disco</th><th>Detalle</th><th>Acciones</th></tr></thead>
+    <tbody>${lista.map(x => `
+      <tr>
+        <td><b>${esc(x.nombre)}</b></td>
+        <td>${badges(x)}</td>
+        <td class="num">${esc(x.ultima_copia ?? "—")}</td>
+        <td class="num">${hace(x.minutos_desde_copia)}</td>
+        <td class="num">${x.porcentaje != null ? x.porcentaje + "%" : "—"}</td>
+        <td>${esc(x.mensaje)}</td>
+        <td><div class="acciones" style="margin:0">${acciones(x)}</div></td>
+      </tr>`).join("")}</tbody></table></div>`;
+}
+
+function pintarFiltros(s) {
+  const cuenta = f => f === "todas" ? s.length
+    : f === "problemas" ? s.filter(esProblema).length
+    : s.filter(x => x.estado === f).length;
+  document.getElementById("filtros").innerHTML = FILTROS.map(([f, t, c]) =>
+    `<button class="filtro ${f === filtro ? "activo" : ""}" style="color:${c}" data-f="${f}"><b>${cuenta(f)}</b>${t}</button>`
+  ).join("");
+}
+
+function pintarContenido(s) {
+  const el = document.getElementById("contenido");
+  // No redibujar mientras el usuario está eligiendo en un desplegable
+  if (el.contains(document.activeElement) && document.activeElement.tagName === "SELECT") return;
+  const lista = ordenar(s.filter(x => filtro === "todas" || (filtro === "problemas" ? esProblema(x) : x.estado === filtro)));
+  if (!s.length) return;
+  if (!lista.length) { el.innerHTML = `<div class="vacio">No hay carpetas con este filtro 🎉</div>`; return; }
+  el.innerHTML = vista === "tabla" ? tabla(lista) : `<div class="grid">${lista.map(tarjeta).join("")}</div>`;
+}
+
+function pintarHistorial(d) {
+  const sel = document.getElementById("hCarpeta");
+  const opciones = ["todas", ...d.servidores.map(x => x.nombre)];
+  if (sel.options.length !== opciones.length) {
+    sel.innerHTML = opciones.map(n => `<option value="${esc(n)}">${n === "todas" ? "Todas" : esc(n)}</option>`).join("");
+    sel.value = hCarpeta;
+  }
+  const lista = d.alertas.filter(a => (hCarpeta === "todas" || a.servidor === hCarpeta) && (hTipo === "todos" || a.nivel === hTipo));
+  document.getElementById("alertas").innerHTML = lista.length
+    ? lista.map(a => `<tr><td style="white-space:nowrap">${esc(a.fecha)}</td><td>${esc(a.servidor)}</td>
+        <td><span class="dot" style="background:${COLOR[a.nivel] || "var(--muted)"}"></span>${esc(a.mensaje)}</td></tr>`).join("")
+    : `<tr><td colspan="3" class="vacio">Sin eventos</td></tr>`;
+}
+
+function pintar(d) {
+  datos = d;
+  document.getElementById("actualizado").textContent = "Última actualización: " + d.ahora
+    + (d.avisos.length ? " · Avisos por " + d.avisos.join(" y ") + " activos" : "");
+  pintarFiltros(d.servidores);
+  pintarContenido(d.servidores);
+  pintarHistorial(d);
+  document.querySelectorAll("#vista button").forEach(b => b.classList.toggle("activo", b.dataset.v === vista));
+  const malos = d.servidores.filter(esProblema).length;
+  document.title = malos ? `(${malos}) ⚠ Monitor de Copias` : "Monitor de Copias";
+}
+
+const app = iniciar(pintar);
+
+// ----- Eventos -----
+document.getElementById("orden").value = orden;
+document.getElementById("orden").onchange = e => { orden = e.target.value; guardarPref("orden", orden); app.repintar(); };
+document.getElementById("filtros").onclick = e => {
+  const b = e.target.closest("[data-f]"); if (!b) return;
+  filtro = b.dataset.f; guardarPref("filtroEstado", filtro); app.repintar();
+};
+document.getElementById("vista").onclick = e => {
+  const b = e.target.closest("[data-v]"); if (!b) return;
+  vista = b.dataset.v; guardarPref("vista", vista); app.repintar();
+};
+document.getElementById("hCarpeta").onchange = e => { hCarpeta = e.target.value; app.repintar(); };
+document.getElementById("hTipo").onchange = e => { hTipo = e.target.value; app.repintar(); };
+document.getElementById("btnLimpiar").onclick = async () => {
+  if (confirm("¿Borrar todo el historial de eventos?")) app.aplicar(await api("/api/historial/limpiar", {}));
+};
+
+const contenido = document.getElementById("contenido");
+contenido.onclick = async e => {
+  const chq = e.target.closest("[data-chequear]");
+  const rea = e.target.closest("[data-reactivar]");
+  if (chq) {
+    chq.disabled = true; chq.textContent = "Chequeando…";
+    try { app.aplicar(await api("/api/chequear", { nombre: chq.dataset.chequear })); }
+    catch (err) { alert(err.message); chq.disabled = false; chq.textContent = "Chequear"; }
+  } else if (rea) {
+    app.aplicar(await api("/api/silenciar", { nombre: rea.dataset.reactivar, minutos: 0 }));
+  }
+};
+contenido.onchange = async e => {
+  const s = e.target.closest("[data-silenciar]");
+  if (!s || !s.value) return;
+  const nombre = s.dataset.silenciar, minutos = +s.value;
+  s.blur();
+  app.aplicar(await api("/api/silenciar", { nombre, minutos }));
+};
+</script>
+</body>
+</html>
